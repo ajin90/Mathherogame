@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수학용사 기르기</title>
+<style>
+body{margin:0;font-family:Arial;background:#1e1e2f;color:white;text-align:center;}
+.container{max-width:500px;margin:auto;padding:20px;}
+h1{color:#ffd700;}
+.box{background:#2d2d44;padding:15px;margin:10px 0;border-radius:12px;}
+button{width:100%;padding:14px;margin:6px 0;font-size:18px;border:none;border-radius:10px;background:#4caf50;color:white;font-weight:bold;}
+input{width:90%;padding:12px;font-size:18px;margin:8px 0;text-align:center;border-radius:8px;border:none;}
+.hide{display:none;}.small{font-size:14px;color:#ccc;}
+</style>
+</head>
+<body>
+<div class="container">
+<div id="loginBox">
+<h1>⚔️ 수학용사 기르기</h1>
+<div class="box">
+<input type="text" id="school" placeholder="초등학교 이름 입력">
+<input type="text" id="nick" placeholder="닉네임 입력">
+<button onclick="enterGame()">게임 시작</button>
+<div class="small">같은 학교 + 닉네임으로 접속하면 이어하기 됩니다.</div>
+</div></div>
+<div id="gameBox" class="hide">
+<h1>⚔️ 수학용사 기르기</h1>
+<div class="box">
+<div>학교: <span id="viewSchool"></span></div>
+<div>닉네임: <span id="viewNick"></span></div>
+<div>직업: <span id="job">없음</span></div>
+<div>골드: <span id="gold">0</span></div>
+<div>무기 강화: +<span id="weapon">0</span></div>
+</div>
+<div class="box" id="jobBox">
+<button onclick="chooseJob('용사')">⚔️ 용사</button>
+<button onclick="chooseJob('채굴자')">⛏️ 채굴자</button>
+</div>
+<div class="box">
+<button onclick="startGame('add')">🌲 초보의 숲</button>
+<button onclick="startGame('mul')">🌊 곱셈 해안</button>
+<button onclick="startGame('div')">🕳️ 나눗셈 동굴</button>
+<button onclick="upgrade()">🔨 무기 강화</button>
+</div>
+<div class="box">
+<div id="question">문제를 시작하세요!</div>
+<input type="number" id="answer">
+<button onclick="submitAnswer()">정답 제출</button>
+</div></div></div>
+<script>
+let school="", nick="", saveKey="";
+let gold=0, weapon=0, job="없음", currentAnswer=0, mode="";
+function enterGame(){
+school=document.getElementById("school").value.trim();
+nick=document.getElementById("nick").value.trim();
+if(!school || !nick){alert("학교 이름과 닉네임을 입력하세요!");return;}
+saveKey="mathgame_"+school+"_"+nick;
+let saveData=localStorage.getItem(saveKey);
+if(saveData){let data=JSON.parse(saveData);gold=data.gold;weapon=data.weapon;job=data.job;alert("이전 게임 데이터를 불러왔습니다!");}
+else{gold=0;weapon=0;job="없음";alert("새로운 용사가 생성되었습니다!");}
+document.getElementById("loginBox").classList.add("hide");
+document.getElementById("gameBox").classList.remove("hide");
+updateUI();}
+function saveGame(){localStorage.setItem(saveKey, JSON.stringify({gold,weapon,job}));}
+function updateUI(){
+viewSchool.innerText=school;viewNick.innerText=nick;goldEl=document.getElementById("gold");goldEl.innerText=gold;
+weaponEl=document.getElementById("weapon");weaponEl.innerText=weapon;jobEl=document.getElementById("job");jobEl.innerText=job;}
+function chooseJob(name){job=name;saveGame();updateUI();alert(name+" 선택 완료!");}
+function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+function startGame(type){
+mode=type; let a,b,q;
+if(type=="add"){a=rand(100,999);b=rand(100,999);q=`${a} + ${b} = ?`;currentAnswer=a+b;}
+if(type=="mul"){a=rand(10,99);b=rand(2,9);q=`${a} × ${b} = ?`;currentAnswer=a*b;}
+if(type=="div"){b=rand(2,9);currentAnswer=rand(2,20);a=b*currentAnswer;q=`${a} ÷ ${b} = ?`;}
+question.innerText=q; if(Math.random()<0.2){setTimeout(raider,1500);}
+}
+function upgrade(){mode="upgrade";let a=rand(10,99),b=rand(2,9);currentAnswer=a*b;question.innerText=`강화 문제! ${a} × ${b} = ?`;}
+function submitAnswer(){
+let user=parseInt(answer.value);
+if(user===currentAnswer){
+ if(mode=="upgrade"){weapon++;alert("강화 성공! +"+weapon);}
+ else{gold += 10 + weapon*2;alert("정답! 골드 획득!");}
+}else{
+ if(mode=="upgrade"){weapon=0;alert("강화 실패! +0 초기화!");}
+ else{alert("오답!");}
+}
+answer.value=""; saveGame(); updateUI();}
+function raider(){let loss=Math.min(30,gold);gold-=loss;saveGame();updateUI();alert("🦹 약탈자 등장! 골드 "+loss+" 잃었습니다!");}
+</script>
+</body></html>
