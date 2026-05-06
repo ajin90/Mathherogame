@@ -74,14 +74,6 @@
         <p class="muted">※ 서버 계정이 아니라 현재 기기의 브라우저에 저장되는 방식입니다.</p>
       </section>
 
-      <section id="jobScreen" class="card hidden">
-        <h2>직업을 선택하세요</h2>
-        <p class="muted">처음 한 번만 선택합니다. 나중에 새로 시작하면 다시 고를 수 있어요.</p>
-        <div class="grid">
-          <button class="primary" onclick="chooseJob('용사')">⚔️ 용사<br><span class="muted">전투형</span></button>
-          <button class="success" onclick="chooseJob('광석 채굴자')">⛏️ 광석 채굴자<br><span class="muted">수집형</span></button>
-        </div>
-      </section>
 
       <section id="townScreen" class="hidden">
         <div class="card center">
@@ -94,6 +86,7 @@
           <div>💰 골드<br><span id="goldText">0</span> G</div>
           <div>❤️ 체력<br><span id="hpText">5</span> / 5</div>
           <div>🗡️ 무기<br>+<span id="weaponText">0</span></div>
+          <div>👾 퇴치<br><span id="defeatedText">0</span> 마리</div>
           <div>🏆 점수<br><span id="scoreText">0</span></div>
         </div>
 
@@ -129,7 +122,8 @@
           <div class="big-emoji" id="eventEmoji">👾</div>
           <h3 id="eventTitle">슬라임이 나타났다!</h3>
           <p id="eventDesc">문제를 맞히면 공격합니다.</p>
-          <p id="timerText" class="timer hidden">남은 시간: <span id="timeLeft">10</span>초</p>
+          <div id="enemyHpBox" class="message" style="min-height:auto;margin-top:10px">❤️ 몬스터 체력: <span id="enemyHpText">3</span> / <span id="enemyMaxHpText">3</span></div>
+          <p id="timerText" class="timer hidden">남은 시간: <span id="timeLeft">20</span>초</p>
         </div>
         <div class="problem" id="problemText">123 + 456 = ?</div>
         <input id="answerInput" type="number" placeholder="정답 입력" onkeydown="handleEnter(event)" />
@@ -192,7 +186,8 @@
     let currentArea = "forest";
     let currentMode = "normal";
     let timer = null;
-    let timeLeft = 10;
+    let timeLeft = 20;
+    let currentEnemy = null;
 
     const areaInfo = {
       forest:{title:"🌲 초보의 숲",emoji:"👾",eventTitle:"슬라임이 나타났다!",desc:"세 자리 수 덧셈과 뺄셈으로 공격하세요.",boxClass:"monster-box"},
@@ -205,10 +200,10 @@
     function makeUserKey(school,nickname){return STORAGE_PREFIX+normalizeText(school)+"_"+normalizeText(nickname);}
     function calculateScore(g){
       if(!g) return 0;
-      return g.gold + g.weapon*120 + g.level*80 + g.correct*20 + g.solved*5;
+      return g.gold + g.weapon*120 + g.level*80 + g.correct*20 + g.solved*5 + (g.monstersDefeated||0)*50;
     }
     function createNewGame(school,nickname){
-      return {school,nickname,job:"",gold:100,hp:5,maxHp:5,weapon:0,level:1,solved:0,correct:0,bestScore:0,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      return {school,nickname,gold:100,hp:5,maxHp:5,weapon:0,level:1,solved:0,correct:0,bestScore:0,monstersDefeated:0,monstersSinceRobber:0,nextRobberAt:rand(8,10),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     }
 
     function login(){
@@ -218,12 +213,18 @@
       currentUserKey=makeUserKey(school,nickname);
       const saved=localStorage.getItem(currentUserKey);
       game=saved?JSON.parse(saved):createNewGame(school,nickname);
+      migrateGameData();
       saveGame();
       updateProfileText();
-      if(!game.job) showScreen("jobScreen"); else goTown();
+      goTown();
     }
 
-    function chooseJob(job){game.job=job;saveGame();goTown();}
+    function migrateGameData(){
+      if(game.monstersDefeated === undefined) game.monstersDefeated = 0;
+      if(game.monstersSinceRobber === undefined) game.monstersSinceRobber = 0;
+      if(game.nextRobberAt === undefined) game.nextRobberAt = rand(8,10);
+      if(game.bestScore === undefined) game.bestScore = 0;
+    }
 
     function saveGame(){
       if(!game||!currentUserKey) return;
@@ -245,12 +246,12 @@
       localStorage.removeItem(currentUserKey);
       game=createNewGame(school,nickname);
       saveGame();
-      showScreen("jobScreen");
+      goTown();
     }
 
     function showScreen(id){
       stopTimer();
-      ["loginScreen","jobScreen","townScreen","playScreen","blacksmithScreen","shopScreen","hallScreen"].forEach(s=>document.getElementById(s).classList.add("hidden"));
+      ["loginScreen","townScreen","playScreen","blacksmithScreen","shopScreen","hallScreen"].forEach(s=>document.getElementById(s).classList.add("hidden"));
       document.getElementById(id).classList.remove("hidden");
     }
 
@@ -266,10 +267,11 @@
       document.getElementById("goldText").textContent=game.gold;
       document.getElementById("hpText").textContent=game.hp;
       document.getElementById("weaponText").textContent=game.weapon;
+      document.getElementById("defeatedText").textContent=game.monstersDefeated||0;
       document.getElementById("scoreText").textContent=score;
       document.getElementById("welcomeText").textContent=`${game.nickname}의 모험`;
-      document.getElementById("jobEmoji").textContent=game.job==="용사"?"⚔️":"⛏️";
-      document.getElementById("storyText").textContent=game.job==="용사"?"몬스터를 물리치고 Math Gold를 모으세요!":"광산과 호수에서 보석과 Math Gold를 모으세요!";
+      document.getElementById("jobEmoji").textContent="⚔️";
+      document.getElementById("storyText").textContent="몬스터 체력을 깎아 무찌르고 Math Gold를 모으세요!";
     }
 
     function goTown(){
@@ -283,32 +285,79 @@
 
     function startActivity(area){
       currentArea=area;
+
+      if((game.monstersSinceRobber||0) >= (game.nextRobberAt||rand(8,10))){
+        startRobberEvent(area);
+        return;
+      }
+
+      currentEnemy = createEnemy(area);
+      currentMode = "normal";
+      renderNormalEvent(area);
+      showNextProblem();
+    }
+
+    function createEnemy(area){
+      const names={
+        forest:["슬라임","숲 버섯 괴물","덧셈 고블린"],
+        beach:["곱셈 게","모래 문어","해안 도깨비"],
+        cave:["동굴 박쥐","나눗셈 골렘","바위 괴물"],
+        lake:["분수 물방울","호수 정령","분수 슬라임"]
+      };
+      const list=names[area]||names.forest;
+      const maxHp=rand(3,4);
+      return {name:list[rand(0,list.length-1)], hp:maxHp, maxHp};
+    }
+
+    function renderNormalEvent(area){
       const info=areaInfo[area];
       const eventBox=document.getElementById("eventBox");
       document.getElementById("areaTitle").textContent=info.title;
       document.getElementById("eventEmoji").textContent=info.emoji;
-      document.getElementById("eventTitle").textContent=info.eventTitle;
-      document.getElementById("eventDesc").textContent=info.desc;
-      eventBox.className=info.boxClass;
+      document.getElementById("eventTitle").textContent=`${currentEnemy.name}이/가 나타났다!`;
+      document.getElementById("eventDesc").textContent="문제를 맞히면 몬스터 체력이 1칸 줄어듭니다. 3~4번 맞히면 퇴치할 수 있어요.";
+      eventBox.className="monster-box";
+      document.getElementById("enemyHpBox").classList.remove("hidden");
+      updateEnemyHp();
+      document.getElementById("timerText").classList.add("hidden");
+    }
 
-      const isRobber=Math.random()<0.18;
-      currentMode=isRobber?"robber":"normal";
-      if(isRobber){
-        document.getElementById("eventEmoji").textContent="🥷";
-        document.getElementById("eventTitle").textContent="약탈자가 나타났다!";
-        document.getElementById("eventDesc").textContent="10초 안에 문제를 풀면 희귀 보상을 얻습니다!";
-        document.getElementById("timerText").classList.remove("hidden");
-      }else{
-        document.getElementById("timerText").classList.add("hidden");
-      }
+    function startRobberEvent(area){
+      currentArea=area;
+      currentEnemy=null;
+      currentMode="robber";
+      const info=areaInfo[area];
+      const eventBox=document.getElementById("eventBox");
+      document.getElementById("areaTitle").textContent=info.title;
+      document.getElementById("eventEmoji").textContent="🥷";
+      document.getElementById("eventTitle").textContent="약탈자가 나타났다!";
+      document.getElementById("eventDesc").textContent="20초 안에 문제를 풀면 희귀 보상을 얻습니다!";
+      eventBox.className="monster-box";
+      document.getElementById("enemyHpBox").classList.add("hidden");
+      document.getElementById("timerText").classList.remove("hidden");
+      showNextProblem();
+      startTimer();
+    }
 
-      currentProblem=generateProblem(area);
+    function showNextProblem(){
+      currentProblem=generateProblem(currentArea);
       document.getElementById("problemText").textContent=currentProblem.question;
       document.getElementById("answerInput").value="";
-      document.getElementById("playMessage").textContent="문제를 풀어보세요!";
+      document.getElementById("playMessage").textContent=currentMode==="robber" ? "약탈자를 막아보세요!" : "문제를 맞혀 몬스터를 공격하세요!";
       showScreen("playScreen");
+      if(currentMode==="robber") startTimer();
       setTimeout(()=>document.getElementById("answerInput").focus(),50);
-      if(isRobber) startTimer();
+    }
+
+    function updateEnemyHp(){
+      if(!currentEnemy) return;
+      document.getElementById("enemyHpText").textContent=currentEnemy.hp;
+      document.getElementById("enemyMaxHpText").textContent=currentEnemy.maxHp;
+    }
+
+    function resetRobberCycle(){
+      game.monstersSinceRobber=0;
+      game.nextRobberAt=rand(8,10);
     }
 
     function handleEnter(event){if(event.key==="Enter") submitAnswer();}
@@ -321,21 +370,34 @@
       game.solved+=1;
       if(isCorrect){game.correct+=1;handleCorrect();}else{handleWrong();}
       updateLevel(); saveGame();
-      setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1200);
     }
 
     function handleCorrect(){
       stopTimer();
-      let reward=15+game.weapon*5+game.level*2;
+
       if(currentMode==="robber"){
-        reward+=50;
+        const reward=70+game.weapon*5+game.level*2;
+        game.gold+=reward;
+        resetRobberCycle();
         document.getElementById("playMessage").textContent=`정답! 약탈자를 물리쳤어요!\n희귀 보상으로 ${reward}G를 얻었습니다.`;
-      }else if(currentArea==="cave"||currentArea==="lake"){
-        document.getElementById("playMessage").textContent=`정답! 보석 채굴 성공!\nMath Gold +${reward}`;
-      }else{
-        document.getElementById("playMessage").textContent=`정답! 공격 성공!\nMath Gold +${reward}`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1300);
+        return;
       }
-      game.gold+=reward;
+
+      currentEnemy.hp=Math.max(0,currentEnemy.hp-1);
+      updateEnemyHp();
+
+      if(currentEnemy.hp<=0){
+        const reward=25+game.weapon*5+game.level*3;
+        game.gold+=reward;
+        game.monstersDefeated=(game.monstersDefeated||0)+1;
+        game.monstersSinceRobber=(game.monstersSinceRobber||0)+1;
+        document.getElementById("playMessage").textContent=`정답! ${currentEnemy.name} 퇴치 성공!\nMath Gold +${reward}\n퇴치 수: ${game.monstersDefeated}마리`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1400);
+      }else{
+        document.getElementById("playMessage").textContent=`정답! 공격 성공!\n${currentEnemy.name}의 체력이 ${currentEnemy.hp}칸 남았습니다.`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) showNextProblem();},1000);
+      }
     }
 
     function handleWrong(){
@@ -344,15 +406,18 @@
         const lostGold=Math.min(game.gold,30);
         game.gold-=lostGold;
         game.weapon=Math.max(0,game.weapon-1);
+        resetRobberCycle();
         document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n약탈자에게 ${lostGold}G를 빼앗기고 강화가 1단계 내려갔습니다.`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1400);
       }else{
         game.hp-=1;
-        document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n체력 -1`;
+        document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n몬스터 체력은 그대로입니다. 체력 -1`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) showNextProblem();},1200);
       }
     }
 
     function startTimer(){
-      stopTimer(); timeLeft=10;
+      stopTimer(); timeLeft=20;
       document.getElementById("timeLeft").textContent=timeLeft;
       timer=setInterval(()=>{
         timeLeft-=1;
@@ -362,9 +427,10 @@
           const lostGold=Math.min(game.gold,30);
           game.gold-=lostGold;
           game.weapon=Math.max(0,game.weapon-1);
+          resetRobberCycle();
           saveGame();
           document.getElementById("playMessage").textContent=`시간 초과!\n약탈자에게 ${lostGold}G를 빼앗겼습니다.`;
-          setTimeout(()=>startActivity(currentArea),1300);
+          setTimeout(()=>startActivity(currentArea),1400);
         }
       },1000);
     }
@@ -469,7 +535,6 @@
         userKey:currentUserKey,
         school:game.school,
         nickname:game.nickname,
-        job:game.job||"미정",
         score:Math.max(score,game.bestScore||0),
         gold:game.gold,
         weapon:game.weapon,
@@ -495,9 +560,9 @@
         let rows=list.map((item,i)=>{
           const rankClass=i===0?"rank-1":i===1?"rank-2":i===2?"rank-3":"";
           const medal=i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`;
-          return `<tr class="${rankClass}"><td>${medal}</td><td>${escapeHtml(item.nickname)}</td><td>${escapeHtml(item.school)}</td><td>${item.job}</td><td>${item.score}</td></tr>`;
+          return `<tr class="${rankClass}"><td>${medal}</td><td>${escapeHtml(item.nickname)}</td><td>${escapeHtml(item.school)}</td><td>${item.score}</td></tr>`;
         }).join("");
-        box.innerHTML=`<table><thead><tr><th>순위</th><th>닉네임</th><th>학교</th><th>직업</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
+        box.innerHTML=`<table><thead><tr><th>순위</th><th>닉네임</th><th>학교</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="muted">점수 = 골드 + 강화 보너스 + 레벨 보너스 + 정답 수 보너스입니다.</p>`;
       }
       showScreen("hallScreen");
