@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Math Gold Adventure v3</title>
+  <title>Math Gold Adventure v5</title>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,#e0f2fe,#fef3c7);color:#1f2937;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:16px}
@@ -38,6 +38,17 @@
     .monster-box{background:#fef2f2;border:2px solid #fecaca;border-radius:18px;padding:14px;text-align:center}
     .mine-box{background:#f0fdf4;border:2px solid #bbf7d0;border-radius:18px;padding:14px;text-align:center}
     .timer{color:#dc2626;font-weight:900;font-size:18px}
+    .hp-bar-wrap{width:100%;height:18px;background:#e5e7eb;border-radius:999px;overflow:hidden;border:2px solid #d1d5db;margin-top:8px}
+    .hp-bar-fill{height:100%;width:100%;background:linear-gradient(90deg,#22c55e,#84cc16,#f59e0b,#ef4444);transition:width .35s ease}
+    .hp-label{margin-top:8px;font-size:14px;font-weight:800}
+    .enemy-type{display:inline-block;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:900;background:#dbeafe;color:#1d4ed8;margin-top:6px}
+    .enemy-type.boss{background:#fee2e2;color:#b91c1c}
+    @keyframes monsterShake{0%{transform:translateX(0) rotate(0)}20%{transform:translateX(-8px) rotate(-6deg)}40%{transform:translateX(8px) rotate(6deg)}60%{transform:translateX(-6px) rotate(-4deg)}80%{transform:translateX(6px) rotate(4deg)}100%{transform:translateX(0) rotate(0)}}
+    .monster-hit{animation:monsterShake .38s ease-in-out}
+    .battle-log{margin-top:10px;max-height:150px;overflow:auto;background:#111827;color:#f9fafb;border-radius:14px;padding:10px;font-size:13px;line-height:1.45}
+    .log-line{padding:5px 0;border-bottom:1px solid rgba(255,255,255,.12)}
+    .log-line:last-child{border-bottom:none}
+    .log-good{color:#bbf7d0}.log-bad{color:#fecaca}.log-special{color:#fde68a}
     .hidden{display:none!important}
     .footer-buttons{margin-top:auto;display:flex;flex-direction:column;gap:10px}
     .small-button{padding:10px;font-size:14px}
@@ -55,7 +66,7 @@
   <div class="app">
     <header>
       <h1>⚔️ Math Gold Adventure</h1>
-      <p>v3 · 직업선택 삭제 · 몬스터 체력 버전</p>
+      <p>v5 · 숫자 HP · 데미지 · 콤보 · 전투 로그</p>
       <div id="profileText" class="profile hidden"></div>
     </header>
 
@@ -78,7 +89,7 @@
       <section id="townScreen" class="hidden">
         <div class="card center">
           <h2 id="welcomeText">마을</h2>
-          <p class="muted">v3 수정판: 직업 선택 없음 / 몬스터 체력 있음</p>
+          <p class="muted">v5 수정판: 숫자 HP / 공격력 데미지 / 콤보 / 빠른 정답 2배</p>
           <div class="big-emoji" id="jobEmoji">⚔️</div>
           <p id="storyText">저스티스 마을에 오신 것을 환영합니다.</p>
         </div>
@@ -87,6 +98,8 @@
           <div>💰 골드<br><span id="goldText">0</span> G</div>
           <div>❤️ 체력<br><span id="hpText">5</span> / 5</div>
           <div>🗡️ 무기<br>+<span id="weaponText">0</span></div>
+          <div>⚔️ 공격력<br><span id="attackText">10</span></div>
+          <div>🔥 콤보<br><span id="comboText">0</span></div>
           <div>👾 퇴치<br><span id="defeatedText">0</span> 마리</div>
           <div>🏆 점수<br><span id="scoreText">0</span></div>
         </div>
@@ -123,7 +136,11 @@
           <div class="big-emoji" id="eventEmoji">👾</div>
           <h3 id="eventTitle">슬라임이 나타났다!</h3>
           <p id="eventDesc">문제를 맞히면 공격합니다.</p>
-          <div id="enemyHpBox" class="message" style="min-height:auto;margin-top:10px">❤️ 몬스터 체력: <span id="enemyHpText">3</span> / <span id="enemyMaxHpText">3</span></div>
+          <div id="enemyHpBox" class="message" style="min-height:auto;margin-top:10px">
+            <div id="enemyTypeBadge" class="enemy-type">일반 몬스터</div>
+            <div class="hp-bar-wrap"><div id="enemyHpBar" class="hp-bar-fill"></div></div>
+            <div class="hp-label">❤️ 몬스터 체력: <span id="enemyHpText">30</span> / <span id="enemyMaxHpText">30</span></div>
+          </div>
           <p id="timerText" class="timer hidden">남은 시간: <span id="timeLeft">20</span>초</p>
         </div>
         <div class="problem" id="problemText">123 + 456 = ?</div>
@@ -132,6 +149,7 @@
         <button class="primary" onclick="submitAnswer()">정답 확인</button>
         <div style="height:10px"></div>
         <div id="playMessage" class="message">문제를 풀어보세요!</div>
+        <div id="battleLog" class="battle-log"></div>
         <div style="height:10px"></div>
         <button class="ghost" onclick="goTown()">마을로 돌아가기</button>
       </section>
@@ -189,6 +207,7 @@
     let timer = null;
     let timeLeft = 20;
     let currentEnemy = null;
+    let problemStartTime = 0;
 
     const areaInfo = {
       forest:{title:"🌲 초보의 숲",emoji:"👾",eventTitle:"슬라임이 나타났다!",desc:"세 자리 수 덧셈과 뺄셈으로 공격하세요.",boxClass:"monster-box"},
@@ -201,10 +220,10 @@
     function makeUserKey(school,nickname){return STORAGE_PREFIX+normalizeText(school)+"_"+normalizeText(nickname);}
     function calculateScore(g){
       if(!g) return 0;
-      return g.gold + g.weapon*120 + g.level*80 + g.correct*20 + g.solved*5 + (g.monstersDefeated||0)*50;
+      return g.gold + g.weapon*120 + g.level*80 + g.correct*20 + g.solved*5 + (g.monstersDefeated||0)*50 + (g.bestCombo||0)*30;
     }
     function createNewGame(school,nickname){
-      return {school,nickname,gold:100,hp:5,maxHp:5,weapon:0,level:1,solved:0,correct:0,bestScore:0,monstersDefeated:0,monstersSinceRobber:0,nextRobberAt:rand(8,10),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      return {school,nickname,gold:100,hp:5,maxHp:5,weapon:0,level:1,solved:0,correct:0,combo:0,bestCombo:0,bestScore:0,monstersDefeated:0,monstersSinceRobber:0,nextRobberAt:rand(8,10),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     }
 
     function login(){
@@ -225,6 +244,8 @@
       if(game.monstersSinceRobber === undefined) game.monstersSinceRobber = 0;
       if(game.nextRobberAt === undefined) game.nextRobberAt = rand(8,10);
       if(game.bestScore === undefined) game.bestScore = 0;
+      if(game.combo === undefined) game.combo = 0;
+      if(game.bestCombo === undefined) game.bestCombo = 0;
     }
 
     function saveGame(){
@@ -268,11 +289,13 @@
       document.getElementById("goldText").textContent=game.gold;
       document.getElementById("hpText").textContent=game.hp;
       document.getElementById("weaponText").textContent=game.weapon;
+      document.getElementById("attackText").textContent=getAttackPower();
+      document.getElementById("comboText").textContent=game.combo||0;
       document.getElementById("defeatedText").textContent=game.monstersDefeated||0;
       document.getElementById("scoreText").textContent=score;
       document.getElementById("welcomeText").textContent=`${game.nickname}의 모험`;
       document.getElementById("jobEmoji").textContent="⚔️";
-      document.getElementById("storyText").textContent="몬스터 체력을 깎아 무찌르고 Math Gold를 모으세요!";
+      document.getElementById("storyText").textContent="정답을 맞히면 공격력만큼 데미지를 줍니다. 빠른 정답과 콤보로 강하게 공격하세요!";
     }
 
     function goTown(){
@@ -299,27 +322,46 @@
     }
 
     function createEnemy(area){
-      const names={
-        forest:["슬라임","숲 버섯 괴물","덧셈 고블린"],
-        beach:["곱셈 게","모래 문어","해안 도깨비"],
-        cave:["동굴 박쥐","나눗셈 골렘","바위 괴물"],
-        lake:["분수 물방울","호수 정령","분수 슬라임"]
+      const normalEnemies={
+        forest:[{name:"슬라임",emoji:"🟢"},{name:"숲 버섯 괴물",emoji:"🍄"},{name:"덧셈 고블린",emoji:"👺"},{name:"나뭇잎 늑대",emoji:"🐺"}],
+        beach:[{name:"곱셈 게",emoji:"🦀"},{name:"모래 문어",emoji:"🐙"},{name:"해안 도깨비",emoji:"👹"},{name:"파도 해마",emoji:"🐉"}],
+        cave:[{name:"동굴 박쥐",emoji:"🦇"},{name:"나눗셈 골렘",emoji:"🗿"},{name:"바위 괴물",emoji:"🪨"},{name:"수정 도마뱀",emoji:"🦎"}],
+        lake:[{name:"분수 물방울",emoji:"💧"},{name:"호수 정령",emoji:"🧚"},{name:"분수 슬라임",emoji:"🫧"},{name:"물결 요정",emoji:"🧜"}]
       };
-      const list=names[area]||names.forest;
-      const maxHp=rand(3,4);
-      return {name:list[rand(0,list.length-1)], hp:maxHp, maxHp};
+      const bossEnemies={
+        forest:[{name:"숲의 거대 트롤",emoji:"👹"},{name:"고대 나무 정령",emoji:"🌳"}],
+        beach:[{name:"심해 크랩킹",emoji:"🦞"},{name:"폭풍 문어 대왕",emoji:"🐙"}],
+        cave:[{name:"거암 타이탄",emoji:"🗿"},{name:"수정 드래곤",emoji:"🐲"}],
+        lake:[{name:"호수의 수호자",emoji:"🐉"},{name:"물의 여왕",emoji:"🧜‍♀️"}]
+      };
+      const isBoss=Math.random()<0.16;
+      if(isBoss){
+        const bossList=bossEnemies[area]||bossEnemies.forest;
+        const boss=bossList[rand(0,bossList.length-1)];
+        const maxHp=rand(120,160);
+        return {name:boss.name, emoji:boss.emoji, hp:maxHp, maxHp, isBoss:true};
+      }
+      const list=normalEnemies[area]||normalEnemies.forest;
+      const enemy=list[rand(0,list.length-1)];
+      const maxHp=rand(30,50);
+      return {name:enemy.name, emoji:enemy.emoji, hp:maxHp, maxHp, isBoss:false};
     }
 
     function renderNormalEvent(area){
       const info=areaInfo[area];
       const eventBox=document.getElementById("eventBox");
+      const badge=document.getElementById("enemyTypeBadge");
       document.getElementById("areaTitle").textContent=info.title;
-      document.getElementById("eventEmoji").textContent=info.emoji;
-      document.getElementById("eventTitle").textContent=`${currentEnemy.name}이/가 나타났다!`;
-      document.getElementById("eventDesc").textContent="문제를 맞히면 몬스터 체력이 1칸 줄어듭니다. 3~4번 맞히면 퇴치할 수 있어요.";
+      document.getElementById("eventEmoji").textContent=currentEnemy.emoji || info.emoji;
+      document.getElementById("eventTitle").textContent=currentEnemy.isBoss ? `🔥 보스 몬스터 등장! ${currentEnemy.name}` : `${currentEnemy.name}이/가 나타났다!`;
+      document.getElementById("eventDesc").textContent=currentEnemy.isBoss ? "보스 몬스터입니다! HP 120~160 정도로 강하지만 보상도 큽니다." : "정답을 맞히면 공격력만큼 데미지를 주고 HP 막대가 줄어듭니다.";
       eventBox.className="monster-box";
       document.getElementById("enemyHpBox").classList.remove("hidden");
+      badge.textContent=currentEnemy.isBoss ? "보스 몬스터" : "일반 몬스터";
+      badge.className=currentEnemy.isBoss ? "enemy-type boss" : "enemy-type";
       updateEnemyHp();
+      resetBattleLog();
+      addBattleLog(`${currentEnemy.name} 등장! HP ${currentEnemy.hp}/${currentEnemy.maxHp}`, currentEnemy.isBoss ? "log-special" : "");
       document.getElementById("timerText").classList.add("hidden");
     }
 
@@ -335,13 +377,16 @@
       document.getElementById("eventDesc").textContent="20초 안에 문제를 풀면 희귀 보상을 얻습니다!";
       eventBox.className="monster-box";
       document.getElementById("enemyHpBox").classList.add("hidden");
+      document.getElementById("enemyTypeBadge").className="enemy-type";
       document.getElementById("timerText").classList.remove("hidden");
+      resetBattleLog();
+      addBattleLog("약탈자가 나타났습니다! 20초 안에 막아야 합니다.", "log-special");
       showNextProblem();
-      startTimer();
     }
 
     function showNextProblem(){
       currentProblem=generateProblem(currentArea);
+      problemStartTime=Date.now();
       document.getElementById("problemText").textContent=currentProblem.question;
       document.getElementById("answerInput").value="";
       document.getElementById("playMessage").textContent=currentMode==="robber" ? "약탈자를 막아보세요!" : "문제를 맞혀 몬스터를 공격하세요!";
@@ -354,6 +399,8 @@
       if(!currentEnemy) return;
       document.getElementById("enemyHpText").textContent=currentEnemy.hp;
       document.getElementById("enemyMaxHpText").textContent=currentEnemy.maxHp;
+      const percent=Math.max(0,(currentEnemy.hp/currentEnemy.maxHp)*100);
+      document.getElementById("enemyHpBar").style.width=`${percent}%`;
     }
 
     function resetRobberCycle(){
@@ -375,44 +422,68 @@
 
     function handleCorrect(){
       stopTimer();
+      game.combo=(game.combo||0)+1;
+      game.bestCombo=Math.max(game.bestCombo||0, game.combo);
 
       if(currentMode==="robber"){
-        const reward=70+game.weapon*5+game.level*2;
+        const reward=70+game.weapon*5+game.level*2+(game.combo>=3?20:0);
         game.gold+=reward;
+        addBattleLog(`정답! 약탈자를 물리쳤습니다. 보상 +${reward}G`, "log-good");
         resetRobberCycle();
-        document.getElementById("playMessage").textContent=`정답! 약탈자를 물리쳤어요!\n희귀 보상으로 ${reward}G를 얻었습니다.`;
+        document.getElementById("playMessage").textContent=`정답! 약탈자를 물리쳤어요!\n콤보 ${game.combo}! 희귀 보상으로 ${reward}G를 얻었습니다.`;
         setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1300);
         return;
       }
 
-      currentEnemy.hp=Math.max(0,currentEnemy.hp-1);
+      const elapsed=(Date.now()-problemStartTime)/1000;
+      const quick=elapsed<=7;
+      const baseDamage=getAttackPower();
+      const comboBonus=getComboBonus();
+      let damage=baseDamage+comboBonus;
+      if(quick) damage*=2;
+
+      const beforeHp=currentEnemy.hp;
+      currentEnemy.hp=Math.max(0,currentEnemy.hp-damage);
+      animateMonsterHit();
       updateEnemyHp();
 
+      const quickText=quick ? " ⚡빠른 정답 2배!" : "";
+      const comboText=game.combo>=2 ? ` 🔥${game.combo}콤보!` : "";
+      addBattleLog(`정답! ${damage} 데미지! ${beforeHp} → ${currentEnemy.hp}${quickText}${comboText}`, quick ? "log-special" : "log-good");
+
       if(currentEnemy.hp<=0){
-        const reward=25+game.weapon*5+game.level*3;
+        const reward=(currentEnemy.isBoss?120:30)+game.weapon*6+game.level*4+(game.combo>=5?30:0);
         game.gold+=reward;
         game.monstersDefeated=(game.monstersDefeated||0)+1;
         game.monstersSinceRobber=(game.monstersSinceRobber||0)+1;
-        document.getElementById("playMessage").textContent=`정답! ${currentEnemy.name} 퇴치 성공!\nMath Gold +${reward}\n퇴치 수: ${game.monstersDefeated}마리`;
-        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1400);
+        addBattleLog(`${currentEnemy.name} 퇴치 성공! 보상 +${reward}G`, "log-special");
+        document.getElementById("playMessage").textContent=currentEnemy.isBoss
+          ? `정답! 보스 ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G\n현재 콤보: ${game.combo}`
+          : `정답! ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G\n현재 콤보: ${game.combo}`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1600);
       }else{
-        document.getElementById("playMessage").textContent=`정답! 공격 성공!\n${currentEnemy.name}의 체력이 ${currentEnemy.hp}칸 남았습니다.`;
-        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) showNextProblem();},1000);
+        document.getElementById("playMessage").textContent=`정답! ${damage} 데미지!${quickText}\n${currentEnemy.name} HP: ${currentEnemy.hp}/${currentEnemy.maxHp}\n현재 콤보: ${game.combo}`;
+        setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) showNextProblem();},1050);
       }
     }
 
     function handleWrong(){
       stopTimer();
+      const previousCombo=game.combo||0;
+      game.combo=0;
+      if(previousCombo>0) addBattleLog(`오답! 콤보가 ${previousCombo}에서 0으로 초기화되었습니다.`, "log-bad");
       if(currentMode==="robber"){
         const lostGold=Math.min(game.gold,30);
         game.gold-=lostGold;
         game.weapon=Math.max(0,game.weapon-1);
         resetRobberCycle();
+        addBattleLog(`오답! 약탈자에게 ${lostGold}G를 빼앗겼습니다.`, "log-bad");
         document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n약탈자에게 ${lostGold}G를 빼앗기고 강화가 1단계 내려갔습니다.`;
         setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1400);
       }else{
         game.hp-=1;
-        document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n몬스터 체력은 그대로입니다. 체력 -1`;
+        addBattleLog(`오답! 정답은 ${currentProblem.answer}. 플레이어 체력 -1`, "log-bad");
+        document.getElementById("playMessage").textContent=`아쉽다! 정답은 ${currentProblem.answer}였어요.\n몬스터 HP는 그대로입니다. 체력 -1`;
         setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) showNextProblem();},1200);
       }
     }
@@ -428,6 +499,8 @@
           const lostGold=Math.min(game.gold,30);
           game.gold-=lostGold;
           game.weapon=Math.max(0,game.weapon-1);
+          game.combo=0;
+          addBattleLog(`시간 초과! ${lostGold}G를 빼앗기고 콤보가 초기화되었습니다.`, "log-bad");
           resetRobberCycle();
           saveGame();
           document.getElementById("playMessage").textContent=`시간 초과!\n약탈자에게 ${lostGold}G를 빼앗겼습니다.`;
@@ -466,6 +539,37 @@
       const denominator=rand(3,9); let n1=rand(1,denominator-1), n2=rand(1,denominator-1);
       while(n1===n2) n2=rand(1,denominator-1);
       return {question:`어느 분수가 더 클까요? 1) ${n1}/${denominator}  2) ${n2}/${denominator}`,answer:n1>n2?1:2};
+    }
+
+    function getAttackPower(){
+      return 10 + (game ? game.weapon*3 : 0);
+    }
+
+    function getComboBonus(){
+      return Math.floor(((game && game.combo) || 0)/3)*5;
+    }
+
+    function animateMonsterHit(){
+      const monster=document.getElementById("eventEmoji");
+      monster.classList.remove("monster-hit");
+      void monster.offsetWidth;
+      monster.classList.add("monster-hit");
+      setTimeout(()=>monster.classList.remove("monster-hit"),420);
+    }
+
+    function resetBattleLog(){
+      const log=document.getElementById("battleLog");
+      if(log) log.innerHTML="";
+    }
+
+    function addBattleLog(text, className=""){
+      const log=document.getElementById("battleLog");
+      if(!log) return;
+      const line=document.createElement("div");
+      line.className=`log-line ${className}`;
+      line.textContent=text;
+      log.prepend(line);
+      while(log.children.length>8) log.removeChild(log.lastChild);
     }
 
     function showBlacksmith(){
@@ -541,6 +645,7 @@
         weapon:game.weapon,
         level:game.level,
         correct:game.correct,
+        bestCombo:game.bestCombo||0,
         updatedAt:new Date().toISOString()
       };
       if(idx>=0){
@@ -564,7 +669,7 @@
           return `<tr class="${rankClass}"><td>${medal}</td><td>${escapeHtml(item.nickname)}</td><td>${escapeHtml(item.school)}</td><td>${item.score}</td></tr>`;
         }).join("");
         box.innerHTML=`<table><thead><tr><th>순위</th><th>닉네임</th><th>학교</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
-        <p class="muted">점수 = 골드 + 강화 보너스 + 레벨 보너스 + 정답 수 보너스입니다.</p>`;
+        <p class="muted">점수 = 골드 + 강화 보너스 + 레벨 보너스 + 정답 수 + 퇴치 수 + 최고 콤보 보너스입니다.</p>`;
       }
       showScreen("hallScreen");
     }
