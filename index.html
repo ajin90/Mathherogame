@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Math Gold Adventure v5</title>
+  <title>Math Gold Adventure v6</title>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,#e0f2fe,#fef3c7);color:#1f2937;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:16px}
@@ -40,6 +40,8 @@
     .timer{color:#dc2626;font-weight:900;font-size:18px}
     .hp-bar-wrap{width:100%;height:18px;background:#e5e7eb;border-radius:999px;overflow:hidden;border:2px solid #d1d5db;margin-top:8px}
     .hp-bar-fill{height:100%;width:100%;background:linear-gradient(90deg,#22c55e,#84cc16,#f59e0b,#ef4444);transition:width .35s ease}
+    .exp-bar-wrap{width:100%;height:16px;background:#e5e7eb;border-radius:999px;overflow:hidden;border:2px solid #d1d5db;margin-top:8px}
+    .exp-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#60a5fa,#7c3aed);transition:width .35s ease}
     .hp-label{margin-top:8px;font-size:14px;font-weight:800}
     .enemy-type{display:inline-block;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:900;background:#dbeafe;color:#1d4ed8;margin-top:6px}
     .enemy-type.boss{background:#fee2e2;color:#b91c1c}
@@ -66,7 +68,7 @@
   <div class="app">
     <header>
       <h1>⚔️ Math Gold Adventure</h1>
-      <p>v5 · 숫자 HP · 데미지 · 콤보 · 전투 로그</p>
+      <p>v6 · 용사 레벨 · EXP · 성장 시스템</p>
       <div id="profileText" class="profile hidden"></div>
     </header>
 
@@ -89,19 +91,27 @@
       <section id="townScreen" class="hidden">
         <div class="card center">
           <h2 id="welcomeText">마을</h2>
-          <p class="muted">v5 수정판: 숫자 HP / 공격력 데미지 / 콤보 / 빠른 정답 2배</p>
+          <p class="muted">v6 수정판: 용사 레벨 / EXP / 레벨업 성장 시스템</p>
           <div class="big-emoji" id="jobEmoji">⚔️</div>
           <p id="storyText">저스티스 마을에 오신 것을 환영합니다.</p>
         </div>
 
         <div class="card status">
           <div>💰 골드<br><span id="goldText">0</span> G</div>
-          <div>❤️ 체력<br><span id="hpText">5</span> / 5</div>
+          <div>❤️ 체력<br><span id="hpText">5</span> / <span id="maxHpText">5</span></div>
+          <div>🧑‍🚀 용사 레벨<br>Lv.<span id="levelText">1</span></div>
+          <div>⭐ EXP<br><span id="expText">0</span> / <span id="expMaxText">100</span></div>
           <div>🗡️ 무기<br>+<span id="weaponText">0</span></div>
           <div>⚔️ 공격력<br><span id="attackText">10</span></div>
           <div>🔥 콤보<br><span id="comboText">0</span></div>
           <div>👾 퇴치<br><span id="defeatedText">0</span> 마리</div>
           <div>🏆 점수<br><span id="scoreText">0</span></div>
+        </div>
+
+        <div class="card">
+          <h3>⭐ 용사 경험치</h3>
+          <div class="exp-bar-wrap"><div id="expBar" class="exp-bar-fill"></div></div>
+          <p class="muted">몬스터를 퇴치하면 EXP를 얻고, 레벨업하면 공격력이 오르며 체력이 회복됩니다.</p>
         </div>
 
         <div class="card">
@@ -220,10 +230,10 @@
     function makeUserKey(school,nickname){return STORAGE_PREFIX+normalizeText(school)+"_"+normalizeText(nickname);}
     function calculateScore(g){
       if(!g) return 0;
-      return g.gold + g.weapon*120 + g.level*80 + g.correct*20 + g.solved*5 + (g.monstersDefeated||0)*50 + (g.bestCombo||0)*30;
+      return g.gold + g.weapon*120 + (g.level||1)*200 + (g.exp||0)*2 + g.correct*20 + g.solved*5 + (g.monstersDefeated||0)*50 + (g.bestCombo||0)*30;
     }
     function createNewGame(school,nickname){
-      return {school,nickname,gold:100,hp:5,maxHp:5,weapon:0,level:1,solved:0,correct:0,combo:0,bestCombo:0,bestScore:0,monstersDefeated:0,monstersSinceRobber:0,nextRobberAt:rand(8,10),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      return {school,nickname,gold:100,hp:5,maxHp:5,weapon:0,level:1,exp:0,solved:0,correct:0,combo:0,bestCombo:0,bestScore:0,monstersDefeated:0,monstersSinceRobber:0,nextRobberAt:rand(8,10),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     }
 
     function login(){
@@ -246,6 +256,9 @@
       if(game.bestScore === undefined) game.bestScore = 0;
       if(game.combo === undefined) game.combo = 0;
       if(game.bestCombo === undefined) game.bestCombo = 0;
+      if(game.level === undefined) game.level = 1;
+      if(game.exp === undefined) game.exp = 0;
+      if(game.maxHp === undefined) game.maxHp = 5;
     }
 
     function saveGame(){
@@ -288,6 +301,12 @@
       const score=calculateScore(game);
       document.getElementById("goldText").textContent=game.gold;
       document.getElementById("hpText").textContent=game.hp;
+      document.getElementById("maxHpText").textContent=game.maxHp;
+      document.getElementById("levelText").textContent=game.level||1;
+      document.getElementById("expText").textContent=game.exp||0;
+      document.getElementById("expMaxText").textContent=getExpToNextLevel();
+      const expPercent=Math.min(100, ((game.exp||0)/getExpToNextLevel())*100);
+      document.getElementById("expBar").style.width=`${expPercent}%`;
       document.getElementById("weaponText").textContent=game.weapon;
       document.getElementById("attackText").textContent=getAttackPower();
       document.getElementById("comboText").textContent=game.combo||0;
@@ -295,7 +314,7 @@
       document.getElementById("scoreText").textContent=score;
       document.getElementById("welcomeText").textContent=`${game.nickname}의 모험`;
       document.getElementById("jobEmoji").textContent="⚔️";
-      document.getElementById("storyText").textContent="정답을 맞히면 공격력만큼 데미지를 줍니다. 빠른 정답과 콤보로 강하게 공격하세요!";
+      document.getElementById("storyText").textContent="몬스터를 퇴치해 EXP를 모으고 용사 레벨을 올리세요! 레벨이 오르면 공격력이 강해집니다.";
     }
 
     function goTown(){
@@ -428,9 +447,11 @@
       if(currentMode==="robber"){
         const reward=70+game.weapon*5+game.level*2+(game.combo>=3?20:0);
         game.gold+=reward;
-        addBattleLog(`정답! 약탈자를 물리쳤습니다. 보상 +${reward}G`, "log-good");
+        const expResult=addExp(50);
+        addBattleLog(`정답! 약탈자를 물리쳤습니다. 보상 +${reward}G / EXP +50`, "log-good");
+        if(expResult) addBattleLog(expResult.replace(/\n/g, " "), "log-special");
         resetRobberCycle();
-        document.getElementById("playMessage").textContent=`정답! 약탈자를 물리쳤어요!\n콤보 ${game.combo}! 희귀 보상으로 ${reward}G를 얻었습니다.`;
+        document.getElementById("playMessage").textContent=`정답! 약탈자를 물리쳤어요!\n콤보 ${game.combo}! 보상 +${reward}G / EXP +50${expResult ? "\n" + expResult : ""}`;
         setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1300);
         return;
       }
@@ -453,13 +474,16 @@
 
       if(currentEnemy.hp<=0){
         const reward=(currentEnemy.isBoss?120:30)+game.weapon*6+game.level*4+(game.combo>=5?30:0);
+        const expGain=currentEnemy.isBoss?80:20;
         game.gold+=reward;
         game.monstersDefeated=(game.monstersDefeated||0)+1;
         game.monstersSinceRobber=(game.monstersSinceRobber||0)+1;
-        addBattleLog(`${currentEnemy.name} 퇴치 성공! 보상 +${reward}G`, "log-special");
+        const expResult=addExp(expGain);
+        addBattleLog(`${currentEnemy.name} 퇴치 성공! 보상 +${reward}G / EXP +${expGain}`, "log-special");
+        if(expResult) addBattleLog(expResult.replace(/\n/g, " "), "log-special");
         document.getElementById("playMessage").textContent=currentEnemy.isBoss
-          ? `정답! 보스 ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G\n현재 콤보: ${game.combo}`
-          : `정답! ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G\n현재 콤보: ${game.combo}`;
+          ? `정답! 보스 ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G / EXP +${expGain}\n현재 콤보: ${game.combo}${expResult ? "\n" + expResult : ""}`
+          : `정답! ${currentEnemy.name} 퇴치 성공!\n${damage} 데미지 / 보상 +${reward}G / EXP +${expGain}\n현재 콤보: ${game.combo}${expResult ? "\n" + expResult : ""}`;
         setTimeout(()=>{if(!document.getElementById("playScreen").classList.contains("hidden")) startActivity(currentArea);},1600);
       }else{
         document.getElementById("playMessage").textContent=`정답! ${damage} 데미지!${quickText}\n${currentEnemy.name} HP: ${currentEnemy.hp}/${currentEnemy.maxHp}\n현재 콤보: ${game.combo}`;
@@ -510,7 +534,35 @@
     }
 
     function stopTimer(){if(timer){clearInterval(timer);timer=null;}}
-    function updateLevel(){game.level=Math.floor(game.correct/10)+1;}
+
+    function getExpToNextLevel(){
+      const lv=(game && game.level) || 1;
+      return 100 + (lv-1)*50;
+    }
+
+    function addExp(amount){
+      if(!game) return "";
+      game.exp=(game.exp||0)+amount;
+      return checkLevelUp(true);
+    }
+
+    function checkLevelUp(showMessage=false){
+      if(!game) return "";
+      let messages=[];
+      while((game.exp||0) >= getExpToNextLevel()){
+        game.exp -= getExpToNextLevel();
+        game.level=(game.level||1)+1;
+        if(game.level % 5 === 0){
+          game.maxHp=(game.maxHp||5)+1;
+          messages.push(`최대 체력 +1`);
+        }
+        game.hp=game.maxHp;
+        messages.unshift(`레벨업! Lv.${game.level} 달성`);
+      }
+      return messages.length ? messages.join("\n") + "\n체력이 모두 회복되었습니다." : "";
+    }
+
+    function updateLevel(){checkLevelUp();}
     function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
     function generateProblem(area){
       if(area==="forest") return generateAddSubProblem();
@@ -542,7 +594,7 @@
     }
 
     function getAttackPower(){
-      return 10 + (game ? game.weapon*3 : 0);
+      return 10 + (game ? game.weapon*3 + ((game.level||1)-1)*2 : 0);
     }
 
     function getComboBonus(){
@@ -644,6 +696,7 @@
         gold:game.gold,
         weapon:game.weapon,
         level:game.level,
+        exp:game.exp||0,
         correct:game.correct,
         bestCombo:game.bestCombo||0,
         updatedAt:new Date().toISOString()
@@ -669,7 +722,7 @@
           return `<tr class="${rankClass}"><td>${medal}</td><td>${escapeHtml(item.nickname)}</td><td>${escapeHtml(item.school)}</td><td>${item.score}</td></tr>`;
         }).join("");
         box.innerHTML=`<table><thead><tr><th>순위</th><th>닉네임</th><th>학교</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
-        <p class="muted">점수 = 골드 + 강화 보너스 + 레벨 보너스 + 정답 수 + 퇴치 수 + 최고 콤보 보너스입니다.</p>`;
+        <p class="muted">점수 = 골드 + 강화 보너스 + 용사 레벨/EXP + 정답 수 + 퇴치 수 + 최고 콤보 보너스입니다.</p>`;
       }
       showScreen("hallScreen");
     }
